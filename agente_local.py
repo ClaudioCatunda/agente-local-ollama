@@ -1,6 +1,7 @@
 import os
 import httpx
 import json
+import chromadb 
 
 # 1. FUNÇÃO: Mapeador do Hardware
 def listar_arquivos_locais(subpasta: str) -> list:
@@ -49,64 +50,105 @@ OLLAMA_URL = "http://localhost:11434/api/chat"
 MODELO_LOCAL = "llama3.2:latest"
 
 def executar_fluxo_agente(pergunta_usuario):
-    # Passo 1: O Python coleta os dados do hardware diretamente
-    arquivos_reais = listar_arquivos_locais(".")
+    RAIZ_SEGURA = "/Volumes/Catunda_SSD/Developer/Documents"
+    CHROMA_PATH = "/Volumes/Catunda_SSD/Developer/chroma_db"
+    MAPA_JSON_PATH = os.path.join(RAIZ_SEGURA, "mapa_conhecimento.json")
     
-    # Passo 2: O Llama atua como classificador/extrator estrito
-    prompt_selecao = (
-        f"Você é um classificador estrito. O usuário fez a seguinte pergunta: '{pergunta_usuario}'\n"
-        f"Os arquivos reais disponíveis no SSD são: {arquivos_reais}\n"
-        "Identifique se a pergunta exige a leitura de algum desses arquivos para ser respondida.\n"
-        "Se sim, responda estritamente com o nome exato do arquivo encontrado na lista (ex: plano_estudos.txt).\n"
-        "Se a pergunta for genérica, apenas uma listagem, ou não precisar ler nenhum arquivo, responda apenas: NENHUM"
-    )
+    conteudo_contexto = ""
     
+    # Passo 1: Tentativa de Busca Semântica no Banco Vetorial (RAG)
     try:
-        res_selecao = httpx.post(OLLAMA_URL, json={
-            "model": MODELO_LOCAL, 
-            "messages": [{"role": "user", "content": prompt_selecao}],
-            "stream": False
-        }, timeout=30.0)
+        # Geramos o embedding da pergunta do usuário usando o modelo local do Ollama
+        response_embed = httpx.post("http://localhost:11434/api/embeddings", json={
+            "model": "nomic-embed-text:latest",
+            "prompt": pergunta_usuario
+        }, timeout=15.0)
         
-        decisao_modelo = res_selecao.json().get("message", {}).get("content", "").strip()
-        
-        # O Python avalia a decisão com base nos arquivos reais
-        conteudo_contexto = ""
-        if decisao_modelo in arquivos_reais:
-            print(f"   [Sistema]: Extraindo conteúdo real de '{decisao_modelo}'...")
-            conteudo_contexto = ler_conteudo_arquivo(decisao_modelo)
-        else:
-            print(f"   [Sistema]: Processando consulta geral de arquivos.")
-            conteudo_contexto = f"Lista de arquivos reais no SSD: {arquivos_reais}"
+        if response_embed.status_code == 200:
+            vetor_pergunta = response_embed.json().get("embedding")
             
-        # Passo 3: Geração da resposta final em texto livre baseada em fatos injetados
+            # Conecta ao ChromaDB no SSD de forma silenciosa
+            cliente_chroma = chromadb.PersistentClient(path=CHROMA_PATH)
+            colecao = cliente_chroma.get_collection(name="documentos_developer")
+            
+            # Busca os 2 pedaços de texto semanticamente mais próximos à pergunta
+            resultados_vetoriais = colecao.query(
+                query_embeddings=[vetor_pergunta],
+                n_results=2
+            )
+            
+            documentos_encontrados = resultados_vetoriais.get("documents", [[]])[0]
+            metadados_encontrados = resultados_vetoriais.get("metadatas", [[]])[0]
+            
+            if documentos_encontrados and len(documentos_encontrados) > 0:
+                print(f"   [Sistema]: 🎯 Recuperação Vetorial Ativa (RAG). Localizados {len(documentos_encontrados)} fragmentos relevantes.")
+                for doc, meta in zip(documentos_encontrados, metadados_encontrados):
+                    conteudo_contexto += f"\n--- Trecho extraído de {meta.get('fonte')} ---\n{doc}\n"
+    except Exception as e:
+        # Se o banco vetorial falhar ou ainda não tiver dados, o sistema ignora silenciosamente
+        pass
+
+    # Passo 2: Fallback Seguro para Metadados (Se o RAG não trouxer dados relevantes)
+    if not conteudo_contexto.strip():
+        print(f"   [Sistema]: Usando otimização por mapa de conhecimento.")
+        if os.path.exists(MAPA_JSON_PATH):
+            try:
+                with open(MAPA_JSON_PATH, 'r', encoding='utf-8') as f:
+                    mapa_conteudo = json.load(f).get("arquivos", {})
+                    conteudo_contexto = f"Resumo dos metadados do SSD: {json.dumps(mapa_conteudo, ensure_ascii=False)}"
+            except:
+                conteudo_contexto = "Nenhum dado contextual disponível no momento."
+
+    try:
+    # Passo 3: Geração da Resposta com STREAMING (Velocidade Máxima)
         prompt_final = [
             {
                 "role": "system",
-                "content": "Você é um assistente de organização. Responda à pergunta do usuário baseando-se estritamente nos dados reais fornecidos. Não mencione arquivos que não estão presentes nos dados injetados."
+                "content": "Você é um assistente de engenharia de software e infraestrutura. Responda à pergunta baseando-se estritamente nos dados reais fornecidos. Seja técnico, direto e formate as saídas com Markdown estruturado."
             },
             {
                 "role": "user",
-                "content": f"Dados extraídos do SSD:\n{conteudo_contexto}\n\nPergunta do Usuário: {pergunta_usuario}"
+                "content": f"Contexto extraído do SSD:\n{conteudo_contexto}\n\nPergunta do Usuário: {pergunta_usuario}"
             }
         ]
         
-        res_final = httpx.post(OLLAMA_URL, json={
+        # Usamos httpx.stream em vez de httpx.post comum
+        with httpx.stream("POST", OLLAMA_URL, json={
             "model": MODELO_LOCAL,
             "messages": prompt_final,
-            "stream": False
-        }, timeout=60.0)
-        
-        return res_final.json().get("message", {}).get("content", "").strip()
+            "stream": True # Ativamos o streaming no Ollama
+        }, timeout=60.0) as r:
+            
+            resposta_completa = ""
+            print("\nAgente 🤖: ", end="", flush=True)
+            
+            # Lê os fragmentos de texto conforme o Ollama vai gerando
+            for line in r.iter_lines():
+                if line:
+                    dados_linha = json.loads(line)
+                    conteudo_fragmento = dados_linha.get("message", {}).get("content", "")
+                    print(conteudo_fragmento, end="", flush=True)
+                    resposta_completa += conteudo_fragmento
+            print() # Quebra de linha final
+            
+        return resposta_completa
         
     except Exception as e:
-        return f"Erro ao processar fluxo: {e}"
+        print(f"\nErro ao processar resposta: {e}")
+        return ""
 
-# 4. EXECUÇÃO DO LOOP DO CHAT CLEAN
+# 4. EXECUÇÃO DO LOOP DO CHAT CLEAN (ADAPTADO PARA STREAMING)
 print("===========================================================")
-print("🤖 AGENTE LOCAL DETERMINÍSTICO - CONTROLADOR DO DOCUMENTS")
+print("🤖 AGENTE LOCAL DETERMINÍSTICO - MOTOR RAG COM STREAMING")
 print("Digite sua pergunta ou 'sair' para encerrar.")
 print("===========================================================")
+
+historico_global = [
+    {
+        "role": "system",
+        "content": "Você é um assistente de organização. Responda à pergunta do usuário baseando-se estritamente nos dados reais fornecidos. Seja claro, direto e conciso."
+    }
+]
 
 while True:
     try:
@@ -119,10 +161,19 @@ while True:
             continue
             
         print("\n[Agente Processando...]")
+        
+        # O streaming agora acontece DENTRO da função executar_fluxo_agente
         resposta = executar_fluxo_agente(entrada)
-        print(f"\nAgente 🤖:\n{resposta}")
+        
         print("\n-----------------------------------------------------------")
         
+        # GESTÃO DE MEMÓRIA (Janela Deslizante)
+        if resposta:
+            historico_global.append({"role": "user", "content": entrada})
+            historico_global.append({"role": "assistant", "content": resposta})
+            if len(historico_global) > 5:
+                historico_global = [historico_global[0]] + historico_global[-4:]
+            
     except KeyboardInterrupt:
         print("\nSessão encerrada via teclado. 🚪")
         break

@@ -12,3 +12,6 @@ Documents/
 
 # Arquivos do Sistema Operacional
 .DS_Store
+
+# Banco de Dados Vetorial Local
+chroma_db/
