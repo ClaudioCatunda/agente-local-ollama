@@ -1,0 +1,14 @@
+# Ambiente Virtual
+.venv/
+__pycache__/
+*.pyc
+
+# Arquivos de Dados e Configurações Pessoais (Sandbox)
+Documents/
+*.json
+*.md
+*.txt
+*.swp
+
+# Arquivos do Sistema Operacional
+.DS_Store
