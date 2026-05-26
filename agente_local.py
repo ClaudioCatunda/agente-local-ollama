@@ -47,7 +47,8 @@ def ler_conteudo_arquivo(nome_arquivo: str) -> str:
     
 # 3. INTERFACE DETERMINÍSTICA (ORQUESTRADA VIA PYTHON)
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODELO_LOCAL = "llama3.2:latest"
+#MODELO_LOCAL = "llama3.2:latest"
+MODELO_LOCAL = "qwen2.5:14b"
 
 def executar_fluxo_agente(pergunta_usuario):
     RAIZ_SEGURA = "/Volumes/Catunda_SSD/Developer/Documents"
@@ -71,10 +72,10 @@ def executar_fluxo_agente(pergunta_usuario):
             cliente_chroma = chromadb.PersistentClient(path=CHROMA_PATH)
             colecao = cliente_chroma.get_collection(name="documentos_developer")
             
-            # Busca os 2 pedaços de texto semanticamente mais próximos à pergunta
+            # Busca os 4 pedaços de texto semanticamente mais próximos à pergunta
             resultados_vetoriais = colecao.query(
                 query_embeddings=[vetor_pergunta],
-                n_results=2
+                n_results=8
             )
             
             documentos_encontrados = resultados_vetoriais.get("documents", [[]])[0]
