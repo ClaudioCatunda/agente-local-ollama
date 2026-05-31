@@ -1,7 +1,7 @@
 import os
 import httpx
 import json
-import chromadb 
+import chromadb     
 
 # 1. FUNÇÃO: Mapeador do Hardware
 def listar_arquivos_locais(subpasta: str) -> list:
@@ -52,7 +52,7 @@ MODELO_LOCAL = "qwen2.5:14b"
 
 def executar_fluxo_agente(pergunta_usuario):
     RAIZ_SEGURA = "/Volumes/Catunda_SSD/Developer/Documents"
-    CHROMA_PATH = "/Volumes/Catunda_SSD/Developer/chroma_db"
+    CHROMA_PATH = "/Volumes/Catunda_SSD/Developer/Lotofacil/chroma_db"
     MAPA_JSON_PATH = os.path.join(RAIZ_SEGURA, "mapa_conhecimento.json")
     
     conteudo_contexto = ""

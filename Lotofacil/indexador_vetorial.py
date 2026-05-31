@@ -41,7 +41,7 @@ def extrair_texto_excel(caminho_arquivo):
     
 # Configurações de Caminhos no Catunda_SSD
 RAIZ_SEGURA = "/Volumes/Catunda_SSD/Developer/Documents"
-CHROMA_PATH = "/Volumes/Catunda_SSD/Developer/chroma_db"
+CHROMA_PATH = "/Volumes/Catunda_SSD/Developer/Lotofacil/chroma_db"
 
 # Configurações do Ollama
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
