@@ -8,6 +8,7 @@ Documents/
 *.json
 *.md
 !CLAUDE.md
+!.claude/skills/**/*.md
 *.txt
 *.swp
 
