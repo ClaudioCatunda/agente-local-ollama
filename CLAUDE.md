@@ -219,6 +219,18 @@ Sempre observar:
 
 ---
 
+# Statistical Analysis / Backtesting
+
+For backtesting and ROI claims, always validate with honest walk-forward methodology to avoid look-ahead bias before reporting results.
+
+---
+
+# Environment / Tooling Notes
+
+Interactive TUI commands (`claude doctor`, `gh auth login`, `npm update` with prompts) cannot be captured via Bash redirection — instruct the user to run them directly rather than attempting to pipe output.
+
+---
+
 # Regra Final
 
 Se houver dúvida sobre uma alteração:
